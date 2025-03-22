@@ -170,13 +170,9 @@ public class Round {
         return null;
     }
 
-    private void NextTurn() {
-        _turn = ++_turn % _players.Length;
-    }
+    private void NextTurn() => _turn = ++_turn % _players.Length;
 
-    public void SortCards() {
-        _players[_turn].SortHand(_boner);
-    }
+    public void SortCards() => _players[_turn].SortHand(_boner);
 }
 
 public class Deck {
@@ -244,20 +240,16 @@ public class Card {
         return card.Rank == Rank && card.Suit == Suit;
     }
 
-    public override int GetHashCode() {
-        return (int)Rank * 10 + (int)Suit;
-    }
+    public override int GetHashCode() => (int)Rank * 10 + (int)Suit;
 
-    public static bool operator ==(Card a, Card b) {
+    public static bool operator ==(Card a, Card b) => Equals(a, b);
+
+    public static bool operator !=(Card a, Card b) => !Equals(a, b);
+
+    private static bool Equals(Card a, Card b) {
         if (a is null && b is null) return true;
         if (a is null || b is null) return false;
         return a.Equals(b);
-    }
-
-    public static bool operator !=(Card a, Card b) {
-        if (a is null && b is null) return false;
-        if (a is null || b is null) return true;
-        return !a.Equals(b);
     }
 }
 
