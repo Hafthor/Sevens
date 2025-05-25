@@ -21,7 +21,7 @@ for (;;) {
                 Console.WriteLine(err);
             }
         } else if (line.StartsWith("Jo ")) {
-            err = round.Play(new Card("Jo"), new Card(line[3..]));
+            err = round.Play(Card.Joker, new Card(line[3..]));
         } else {
             err = round.Play(new Card(line));
         }
@@ -65,10 +65,10 @@ public class Round {
     public Round(int players, Random random) {
         var deck = new Deck().Shuffle(random);
         _players = new Player[players];
-        int cardCount = deck.Count / players, bonusCards = deck.Count % players;
-        var startCard = new Card("7s");
+        int cardsPerPlayer = deck.Count / players, remainderCards = deck.Count % players;
+        var startCard = Card.Start;
         for (int i = 0; i < players; i++) {
-            _players[i] = new Player(deck, cardCount + (i < bonusCards ? 1 : 0));
+            _players[i] = new Player(deck, cardsPerPlayer + (i < remainderCards ? 1 : 0));
             if (_players[i].Hand.Any(card => card == startCard)) _turn = i;
         }
         System.Diagnostics.Contracts.Contract.Assert(deck.Count == 0);
@@ -82,24 +82,16 @@ public class Round {
             string s = "";
             for (int i = 0; i < 4; i++) {
                 Suit suit = (Suit)i;
-                if (min[i] == Rank.Joker) {
-                    s += $"{char.ToLower(suit.ToString()[0])}:? ";
-                } else {
-                    s += $"{char.ToLower(suit.ToString()[0])}:";
-                    if (min[i] is Rank.Seven && max[i] is Rank.Seven)
-                        s += "7";
-                    else if (min[i] is Rank.Ace or >= Rank.Ten)
-                        s += $"{min[i].ToString()[..1]}-";
-                    else
-                        s += $"{(int)min[i]}-";
-                    if (max[i] is Rank.Ace or >= Rank.Ten)
-                        s += $"{max[i].ToString()[..1]} ";
-                    else
-                        s += $"{(int)max[i]} ";
-                }
+                s += $"{char.ToLower(suit.ToString()[0])}:";
+                if (min[i] == Rank.Joker)
+                    s += "- ";
+                else if (min[i] is Rank.Seven && max[i] is Rank.Seven)
+                    s += "7 ";
+                else
+                    s += (min[i] is Rank.Ace or >= Rank.Ten ? $"{min[i].ToString()[1]}-" : $"{(int)min[i]}-") +
+                         (max[i] is Rank.Ace or >= Rank.Ten ? $"{max[i].ToString()[1]} " : $"{(int)max[i]} ");
             }
-            s += $"Boner:{_boner}";
-            return s;
+            return s + $"Boner:{_boner}";
         }
     }
 
@@ -111,27 +103,21 @@ public class Round {
     public int Winner => _players.IndexOf(p => p.Hand.Count == 0);
 
     public List<Card> Playables() {
-        List<Card> playables = new();
-        var startCard = new Card("7s");
-        if (max[(int)Suit.Spades] == Rank.Joker) {
-            playables.Add(_players[_turn].Hand.Single(card => card == startCard));
-            playables.AddRange(_players[_turn].Hand.Where(card => card.Rank == Rank.Joker));
-        } else {
-            Rank minSpade = min[(int)Suit.Spades], maxSpade = max[(int)Suit.Spades];
-            foreach (Card card in _players[_turn].Hand) {
-                if (card == _boner && _boner.Rank != Rank.Joker) continue;
-                if (card.Rank is Rank.Seven or Rank.Joker) {
-                    playables.Add(card);
-                } else if (max[(int)card.Suit] != Rank.Joker) {
-                    if (max[(int)card.Suit] == card.Rank - 1 || min[(int)card.Suit] == card.Rank + 1) {
-                        if (card.Suit == Suit.Spades || card.Rank >= minSpade && card.Rank <= maxSpade) {
-                            playables.Add(card);
-                        }
-                    }
-                }
-            }
+        var hand = _players[_turn].Hand;
+        Rank minSpade = min[(int)Suit.Spades], maxSpade = max[(int)Suit.Spades];
+        if (maxSpade == Rank.Joker) {
+            return [
+                hand.Single(card => card == Card.Start),
+                ..hand.Where(card => card.Rank == Rank.Joker)
+            ];
         }
-        return playables;
+        return hand
+            .Where(card => card != _boner || _boner.Rank == Rank.Joker)
+            .Where(card => card.Rank is Rank.Seven or Rank.Joker ||
+                           max[(int)card.Suit] != Rank.Joker &&
+                           (max[(int)card.Suit] == card.Rank - 1 || min[(int)card.Suit] == card.Rank + 1) &&
+                           (card.Suit == Suit.Spades || card.Rank >= minSpade && card.Rank <= maxSpade))
+            .ToList();
     }
 
     public string Play(Card card, Card jokerPlayAs = null) {
@@ -184,7 +170,7 @@ public class Deck {
                 foreach (Rank rank in Enum.GetValues(typeof(Rank)))
                     if (rank != Rank.Joker)
                         _cards.Add(new Card(suit, rank));
-        _cards.Add(new Card(Suit.None, Rank.Joker));
+        _cards.Add(Card.Joker);
     }
 
     public int Count => _cards.Count;
@@ -207,6 +193,8 @@ public class Deck {
 public class Card {
     public readonly Suit Suit;
     public readonly Rank Rank;
+    public static Card Joker { get; } = new(Suit.None, Rank.Joker);
+    public static Card Start { get; } = new(Suit.Spades, Rank.Seven);
 
     public bool IsJoker => Rank is Rank.Joker;
 
@@ -216,16 +204,15 @@ public class Card {
     }
 
     public Card(string str) {
-        if (str[0] == 'J' && str[1] == 'o') {
+        if (str == "Jo") {
             Suit = Suit.None;
             Rank = Rank.Joker;
         } else {
-            if (char.IsDigit(str[0]))
-                Rank = (Rank)(str[0] - '0');
-            else
-                Rank = Enum.GetValues<Rank>().Last(r => r != Rank.Joker && r.ToString()[0] == str[0]);
-            char f = char.ToUpper(str[1]);
-            Suit = Enum.GetValues<Suit>().First(s => s != Suit.None && s.ToString()[0] == f);
+            char rank = str[0], suit = char.ToUpper(str[1]);
+            Rank = char.IsDigit(rank)
+                ? (Rank)(rank - '0')
+                : Enum.GetValues<Rank>().Last(r => r != Rank.Joker && r.ToString()[0] == rank);
+            Suit = Enum.GetValues<Suit>().First(s => s != Suit.None && s.ToString()[0] == suit);
         }
     }
 
