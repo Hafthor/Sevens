@@ -88,8 +88,8 @@ public class Round {
                 else if (min[i] is Rank.Seven && max[i] is Rank.Seven)
                     s += "7 ";
                 else
-                    s += (min[i] is Rank.Ace or >= Rank.Ten ? $"{min[i].ToString()[1]}-" : $"{(int)min[i]}-") +
-                         (max[i] is Rank.Ace or >= Rank.Ten ? $"{max[i].ToString()[1]} " : $"{(int)max[i]} ");
+                    s += (min[i] is Rank.Ace or >= Rank.Ten ? $"{min[i].ToString()[0]}-" : $"{(int)min[i]}-") +
+                         (max[i] is Rank.Ace or >= Rank.Ten ? $"{max[i].ToString()[0]} " : $"{(int)max[i]} ");
             }
             return s + $"Boner:{_boner}";
         }
