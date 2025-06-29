@@ -1,5 +1,5 @@
 ﻿var random = new Random(0);
-var game = new Game(4, 250);
+var game = new Game(4, 350);
 for (;;) {
     var round = new Round(game.PlayerCount, random);
     while (round.Winner < 0) {
@@ -82,14 +82,13 @@ public class Round {
             string s = "";
             for (int i = 0; i < 4; i++) {
                 Suit suit = (Suit)i;
-                s += $"{char.ToLower(suit.ToString()[0])}:";
+                s += $"{suit.ToChar()}:";
                 if (min[i] == Rank.Joker)
                     s += "- ";
                 else if (min[i] is Rank.Seven && max[i] is Rank.Seven)
                     s += "7 ";
                 else
-                    s += (min[i] is Rank.Ace or >= Rank.Ten ? $"{min[i].ToString()[0]}-" : $"{(int)min[i]}-") +
-                         (max[i] is Rank.Ace or >= Rank.Ten ? $"{max[i].ToString()[0]} " : $"{(int)max[i]} ");
+                    s += $"{min[i].ToChar()}-{max[i].ToChar()} ";
             }
             return s + $"Boner:{_boner}";
         }
@@ -216,9 +215,7 @@ public class Card {
         }
     }
 
-    public override string ToString() => !IsJoker
-        ? $"{(Rank is Rank.Ace or >= Rank.Ten ? Rank.ToString()[..1] : ((int)Rank).ToString())}{char.ToLower(Suit.ToString()[0])}"
-        : "Jo";
+    public override string ToString() => $"{Rank.ToChar()}{Suit.ToChar()}";
 
     public int Value => Rank >= Rank.Ten ? 10 : 5;
 
@@ -306,4 +303,9 @@ public static class Extensions {
         }
         return -1;
     }
+    
+    public static char ToChar(this Rank rank) =>
+        rank is >= Rank.Two and <= Rank.Nine ? (char)('0' + (int)rank) : rank.ToString()[0];
+
+    public static char ToChar(this Suit suit) => suit is Suit.None ? 'o' : char.ToLower(suit.ToString()[0]);
 }
