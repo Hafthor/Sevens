@@ -60,7 +60,7 @@ public class Round {
     private readonly Player[] _players;
     private int _turn;
     private Card _boner = new("Jo");
-    private Rank[] max = new Rank[4], min = new Rank[4];
+    private readonly Rank[] _max = new Rank[4], _min = new Rank[4];
 
     public Round(int players, Random random) {
         var deck = new Deck().Shuffle(random);
@@ -73,7 +73,7 @@ public class Round {
         }
         System.Diagnostics.Contracts.Contract.Assert(deck.Count == 0);
         for (int i = 0; i < 4; i++) {
-            min[i] = max[i] = Rank.Joker;
+            _min[i] = _max[i] = Rank.Joker;
         }
     }
 
@@ -83,12 +83,12 @@ public class Round {
             for (int i = 0; i < 4; i++) {
                 Suit suit = (Suit)i;
                 s += $"{suit.ToChar()}:";
-                if (min[i] == Rank.Joker)
+                if (_min[i] == Rank.Joker)
                     s += "- ";
-                else if (min[i] is Rank.Seven && max[i] is Rank.Seven)
-                    s += "7 ";
+                else if (_min[i] == _max[i])
+                    s += $"{_min[i].ToChar()} ";
                 else
-                    s += $"{min[i].ToChar()}-{max[i].ToChar()} ";
+                    s += $"{_min[i].ToChar()}-{_max[i].ToChar()} ";
             }
             return s + $"Boner:{_boner}";
         }
@@ -103,7 +103,7 @@ public class Round {
 
     public List<Card> Playables() {
         var hand = _players[_turn].Hand;
-        Rank minSpade = min[(int)Suit.Spades], maxSpade = max[(int)Suit.Spades];
+        Rank minSpade = _min[(int)Suit.Spades], maxSpade = _max[(int)Suit.Spades];
         if (maxSpade == Rank.Joker) {
             return [
                 hand.Single(card => card == Card.Start),
@@ -113,30 +113,30 @@ public class Round {
         return hand
             .Where(card => card != _boner || _boner.Rank == Rank.Joker)
             .Where(card => card.Rank is Rank.Seven or Rank.Joker ||
-                           max[(int)card.Suit] != Rank.Joker &&
-                           (max[(int)card.Suit] == card.Rank - 1 || min[(int)card.Suit] == card.Rank + 1) &&
+                           _max[(int)card.Suit] != Rank.Joker &&
+                           (_max[(int)card.Suit] == card.Rank - 1 || _min[(int)card.Suit] == card.Rank + 1) &&
                            (card.Suit == Suit.Spades || card.Rank >= minSpade && card.Rank <= maxSpade))
             .ToList();
     }
 
     public string Play(Card card, Card jokerPlayAs = null) {
         if (_players[_turn].Hand.All(c => c != card)) return "You don't have that card";
-        Rank minSpade = min[(int)Suit.Spades], maxSpade = max[(int)Suit.Spades];
+        Rank minSpade = _min[(int)Suit.Spades], maxSpade = _max[(int)Suit.Spades];
         bool wasJoker = card.Rank == Rank.Joker;
         if (wasJoker) card = jokerPlayAs;
         if (minSpade == Rank.Joker) {
             if (card.Rank != Rank.Seven || card.Suit != Suit.Spades) return "You must play the 7 of Spades";
         }
-        if (card.Rank == Rank.Seven && min[(int)card.Suit] == Rank.Joker) {
-            min[(int)card.Suit] = max[(int)card.Suit] = card.Rank;
-        } else if (card.Rank == min[(int)card.Suit] - 1) {
+        if (card.Rank == Rank.Seven && _min[(int)card.Suit] == Rank.Joker) {
+            _min[(int)card.Suit] = _max[(int)card.Suit] = card.Rank;
+        } else if (card.Rank == _min[(int)card.Suit] - 1) {
             if (card.Suit != Suit.Spades && card.Rank < minSpade)
                 return "Hasn't been broken yet";
-            min[(int)card.Suit] = card.Rank;
-        } else if (card.Rank == max[(int)card.Suit] + 1) {
+            _min[(int)card.Suit] = card.Rank;
+        } else if (card.Rank == _max[(int)card.Suit] + 1) {
             if (card.Suit != Suit.Spades && card.Rank > maxSpade)
                 return "Hasn't been broken yet";
-            max[(int)card.Suit] = card.Rank;
+            _max[(int)card.Suit] = card.Rank;
         } else {
             return "You can't play that card";
         }
