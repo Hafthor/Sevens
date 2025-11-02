@@ -11,12 +11,31 @@ for (;;) {
             $"Player {round.Turn} turn, playables: {string.Join(",", round.Playables())}, cards: {string.Join(",", round.CurrentPlayer.Hand)}");
         string line = Console.ReadLine(), err;
         if (line is null or "exit" or "quit") break;
+        if (line == "") {
+            var playables = round.Playables();
+            if (playables.Any(card => card != round.Boner)) {
+                Card best = round.BestPlays(playables).First();
+                Console.WriteLine($"Player {round.Turn} plays {best}");
+                line = best.ToString();
+            } else if (playables.Any()) {
+                Card best = round.BestBoner(round.CurrentPlayer.Hand.Where(card => !card.IsJoker).ToList());
+                Console.WriteLine($"Player {round.Turn} plays Jo {best}");
+                line = "Jo " + best;
+            } else {
+                line = "pass";
+            }
+        }
         if (line == "pass") {
             int nextPlayer = (round.Turn + 1) % round.Players.Length;
             for (;;) {
                 Console.WriteLine(
                     $"Player {nextPlayer} to pass, cards: {string.Join(",", round.Players[nextPlayer].Hand)}");
                 string pass = Console.ReadLine();
+                if (pass == "") {
+                    Card worst = round.WorstCard(round.Players[nextPlayer].Hand);
+                    Console.WriteLine($"Player {nextPlayer} passes {worst}");
+                    pass = worst.ToString();
+                }
                 err = round.Pass(new Card(pass));
                 if (err is null) break;
                 Console.WriteLine(err);
@@ -136,6 +155,114 @@ public record Round {
     private void NextTurn() => Turn = ++Turn % Players.Length;
 
     public void SortCards() => Players[Turn].SortHand(Boner);
+
+    public List<Card> BestPlays(List<Card> playables) => playables.Where(card => card != Boner).OrderBy(OpenSpots).ToList();
+
+    public int OpenSpots(Card afterPlay) {
+        Rank[] localMin = (Rank[])min.Clone(), localMax = (Rank[])max.Clone();
+        if (!afterPlay.IsJoker) {
+            if (afterPlay.Rank < localMin[(int)afterPlay.Suit]) localMin[(int)afterPlay.Suit] = afterPlay.Rank;
+            if (afterPlay.Rank > localMax[(int)afterPlay.Suit]) localMax[(int)afterPlay.Suit] = afterPlay.Rank;
+        }
+        Rank minSpade = localMin[(int)Suit.Spades], maxSpade = localMax[(int)Suit.Spades];
+        int spots = 0;
+        if (minSpade > Rank.Ace) spots++;
+        if (maxSpade < Rank.King) spots++;
+        foreach (var suit in Enum.GetValues<Suit>().Where(suit => suit is not Suit.Spades and not Suit.None)) {
+            if (localMin[(int)suit] > minSpade) spots++;
+            if (localMax[(int)suit] < maxSpade) spots++;
+        }
+        return spots;
+    }
+
+    public Card BestBoner(List<Card> hand) {
+        Card best = Card.Joker;
+        int bestScore = int.MinValue; // number of blocking cards
+        Rank minSpade = min[(int)Suit.Spades], maxSpade = max[(int)Suit.Spades];
+        foreach (Suit suit in Enum.GetValues<Suit>().Where(suit => suit != Suit.None)) {
+            Rank lo = min[(int)suit], hi = max[(int)suit];
+            if (lo == Rank.Joker || hi == Rank.Joker) {
+                lo = Rank.Eight;
+                hi = Rank.Six;
+                // will make loCard == hiCard (7 of suit)
+            }
+            Card loCard = new(suit, lo - 1), hiCard = new(suit, hi + 1);
+            int score = 0;
+            if (suit == Suit.Spades || lo - 1 >= minSpade) {
+                int add = 32;
+                if (hand.Contains(loCard)) score -= 100; // avoid boning ourselves
+                for (lo -= 2; lo >= Rank.Ace && add > 0; lo--) {
+                    if (suit != Suit.Spades && lo < minSpade) add >>= 1;
+                    if (hand.Contains(new Card(suit, lo))) score += add;
+                    else add >>= 1;
+                }
+                if (loCard != hiCard) {
+                    if (score > bestScore) {
+                        bestScore = score;
+                        best = loCard;
+                    }
+                
+                    score = 0;
+                    if (hand.Contains(hiCard)) score -= 100; // avoid boning ourselves
+                }
+            }
+            if (suit == Suit.Spades || hi + 1 <= maxSpade) {
+                int add = 32;
+                for (hi += 2; hi <= Rank.King && add > 0; hi++) {
+                    if (suit != Suit.Spades && hi > maxSpade) add >>= 1;
+                    if (hand.Contains(new Card(suit, hi)))
+                        score += hi >= Rank.Ten ? add * 3 / 2 : add; // +50% for 10pt cards
+                    else add >>= 1;
+                }
+                if (score > bestScore) {
+                    bestScore = score;
+                    best = hiCard;
+                }
+            }
+        }
+        return best;
+    }
+
+    public int BlockingScore(Card card) {
+        Rank spadesMin = min[(int)Suit.Spades], spadesMax = max[(int)Suit.Spades];
+        int score = 0;
+        if (card.Suit == Suit.Spades) {
+            if (card.Rank < spadesMin) {
+                score = spadesMin - card.Rank - 1;
+            } else {
+                score = card.Rank - spadesMax - 1;
+            }
+        } else {
+            if (card.Rank < spadesMin) {
+                score = (spadesMin - card.Rank) * 2; // bonus for having spades blocking too
+            } else if (card.Rank > spadesMax) {
+                score = (spadesMax - card.Rank) * 2; // bonus for having spades blocking too
+            }
+            if (card.Rank < min[(int)card.Suit]) {
+                score += min[(int)card.Suit] - card.Rank - 1;
+            } else {
+                score += card.Rank - max[(int)card.Suit] - 1;
+            }
+            score *= 2; // bonus for not being spades
+        }
+        return score;
+    }
+
+    public Card WorstCard(List<Card> hand) {
+        if (hand.Count == 1) return hand.First();
+        int highestScore = int.MinValue;
+        Card worst = default;
+        foreach (Card card in hand.Where(card => !card.IsJoker)) {
+            if (card == Boner) return card;
+            int score = BlockingScore(card);
+            if (card.Rank >= Rank.Ten) score++; // even worse if it could add 10pts instead of 5
+            if (score > highestScore) {
+                highestScore = score;
+                worst = card;
+            }
+        }
+        return worst;
+    }
 }
 
 public readonly record struct Deck() {
